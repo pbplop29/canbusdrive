@@ -8,7 +8,7 @@ BU_: InputECU PowertrainECU DashboardECU
 
 BO_ 256 DriverInput: 4 InputECU
 SG_ Throttle : 0|8@1+ (1,0) [0|100] "%" PowertrainECU
-SG_ Brake : 8|8@1+ (1,0) [1|100] "%" PowertrainECU
+SG_ Brake : 8|8@1+ (1,0) [0|100] "%" PowertrainECU
 SG_ SteeringAngle : 16|16@1- (0.1,0) [-90|90] "deg" DashboardECU
 
 BO_ 512 PowertrainStatus: 4 PowertrainECU

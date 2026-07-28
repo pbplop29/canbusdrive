@@ -106,6 +106,8 @@ For more information, see:
 ## Finding the Controller
 
 - Created [`scripts/checkcontroller.py`](scripts/checkcontroller.py) to list all connected input devices (via `evdev`) and identify the correct one to use as the XBOX controller.
+- For more on the underlying `evdev` interface used here, see the [Linux kernel input documentation](https://docs.kernel.org/input/input.html).
+
 - Ran it:
   ```
   python scripts/checkcontroller.py
@@ -170,7 +172,6 @@ For more information, see:
   ```
 - Why this matters: these ranges are needed to write the conversion code from raw controller values to the `DriverInput` signal ranges defined in the DBC.
 
-- For more on the underlying `evdev` interface used here, see the [Linux kernel input documentation](https://docs.kernel.org/input/input.html).
 
 ## Finding Relevant Buttons/Axes
 
@@ -209,3 +210,70 @@ For more information, see:
   | `Throttle`      | `ABS_RZ` (right trigger) | 0–255             | RT = gas |
   | `Brake`         | `ABS_Z` (left trigger)   | 0–255             | LT = brake                              |
   | `SteeringAngle` | `ABS_X` (left stick)     | −32768–32767      | left/right on the primary stick         |
+
+## Input ECU: Reading Controller Input and Publishing to CAN Bus
+
+- Created [`ecus/inputecu.py`](ecus/inputecu.py) — reads controller axes, converts them to `Throttle`/`Brake`/`SteeringAngle` per the DBC ranges, encodes a `DriverInput` frame, and publishes it on `vcan0`.
+- Ran it alongside `candump vcan0` to verify the published values:
+  ```
+  Throttle= 30%  Brake=  0%  Steering=   0.0 deg
+  Throttle= 65%  Brake=  0%  Steering=   0.0 deg
+  Throttle=100%  Brake=  0%  Steering=   0.0 deg
+  Throttle= 84%  Brake=  0%  Steering=   0.0 deg
+  Throttle= 55%  Brake=  0%  Steering=   0.0 deg
+  Throttle= 32%  Brake=  0%  Steering=   0.0 deg
+  Throttle=  0%  Brake=  0%  Steering=   0.0 deg
+  Throttle=  0%  Brake= 20%  Steering=   0.0 deg
+  Throttle=  0%  Brake=100%  Steering=   0.0 deg
+  Throttle=  0%  Brake= 86%  Steering=   0.0 deg
+  Throttle=  0%  Brake= 36%  Steering=   0.0 deg
+  Throttle=  0%  Brake=  0%  Steering=   0.0 deg
+  Throttle=  0%  Brake=  0%  Steering= -16.9 deg
+  Throttle=  0%  Brake=  0%  Steering= -73.1 deg
+  Throttle=  0%  Brake=  0%  Steering= -90.0 deg
+  Throttle=  0%  Brake=  0%  Steering= -54.8 deg
+  Throttle=  0%  Brake=  0%  Steering=  15.5 deg
+  Throttle=  0%  Brake=  0%  Steering=   0.0 deg
+  Throttle=  0%  Brake=  0%  Steering=   4.2 deg
+  Throttle=  0%  Brake=  0%  Steering=  22.5 deg
+  Throttle=  0%  Brake=  0%  Steering=  57.0 deg
+  Throttle=  0%  Brake=  0%  Steering=  89.3 deg
+  Throttle=  0%  Brake=  0%  Steering=   0.0 deg
+  ```
+  ```
+  vcan0  100   [4]  1E 00 00 00
+  vcan0  100   [4]  41 00 00 00
+  vcan0  100   [4]  64 00 00 00
+  vcan0  100   [4]  54 00 00 00
+  vcan0  100   [4]  37 00 00 00
+  vcan0  100   [4]  20 00 00 00
+  vcan0  100   [4]  00 00 00 00
+  vcan0  100   [4]  00 14 00 00
+  vcan0  100   [4]  00 64 00 00
+  vcan0  100   [4]  00 56 00 00
+  vcan0  100   [4]  00 24 00 00
+  vcan0  100   [4]  00 00 00 00
+  vcan0  100   [4]  00 00 57 FF
+  vcan0  100   [4]  00 00 25 FD
+  vcan0  100   [4]  00 00 7C FC
+  vcan0  100   [4]  00 00 DC FD
+  vcan0  100   [4]  00 00 9B 00
+  vcan0  100   [4]  00 00 00 00
+  vcan0  100   [4]  00 00 2A 00
+  vcan0  100   [4]  00 00 E1 00
+  vcan0  100   [4]  00 00 3A 02
+  vcan0  100   [4]  00 00 7D 03
+  vcan0  100   [4]  00 00 00 00
+  ```
+- Checking some random payload (`100` = `0x100`, the `DriverInput` ID):
+
+  | InputECU log         | candump bytes      | Check                                      |
+  |-----------------------|---------------------|---------------------------------------------|
+  | Throttle=30%          | `1E 00 00 00`       | byte0 `0x1E` = 30                            |
+  | Brake=20%             | `00 14 00 00`       | byte1 `0x14` = 20                            |
+  | Steering=-16.9 deg    | `00 00 57 FF`       | bytes2-3 LE signed `0x57FF`&rarr;`-169`, ×0.1 = -16.9 |
+  | Steering=89.3 deg     | `00 00 7D 03`       | bytes2-3 LE signed `0x037D`&rarr;`893`, ×0.1 = 89.3   |
+
+ - Validated to be in sync.
+
+ 
