@@ -1,5 +1,11 @@
 # canbusdrive
 
+<video src="docsResources/gameplay.webm" controls width="700">
+  Gameplay demo — see docsResources/gameplay.webm
+</video>
+
+(If the video above doesn't render: [docsResources/gameplay.webm](docsResources/gameplay.webm))
+
 ## What is DBC?
 
 - **DBC** = CAN bus Database— a text file format for describing the contents of CAN bus messages.
