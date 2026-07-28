@@ -276,4 +276,45 @@ For more information, see:
 
  - Validated to be in sync.
 
- 
+## Powertrain ECU: Computing Speed and RPM
+
+- Created [`ecus/powertrainecu.py`](ecus/powertrainecu.py) — subscribes to `DriverInput` (`Throttle`, `Brake`), integrates a simple longitudinal motion model to compute `Speed`, derives `RPM` from `Speed`, and publishes `PowertrainStatus` on `vcan0`.
+- Subscribes via a `python-can` hardware filter: `can_id=0x100` (`DriverInput`'s ID), `can_mask=0x7FF`. `0x7FF` is all 11 bits set — the full width of a standard (non-extended) CAN identifier — so the mask forces an exact match on the ID rather than matching a range/subset of IDs. This means the bus socket only wakes the ECU up for `DriverInput` frames, filtering out `PowertrainStatus` frames (its own broadcasts) at the kernel level instead of in Python.
+- Model, run once every tick (`TICK_SECONDS = 0.05s`, i.e. 20 Hz):
+
+  ```
+  acceleration = Throttle * THROTTLE_ACCELERATION_GAIN
+               - Brake * BRAKE_DECELERATION_GAIN
+               - Speed * DRAG_COEFFICIENT
+
+  Speed = clamp(Speed + acceleration * TICK_SECONDS, 0, MAX_SPEED)
+  RPM   = clamp(IDLE_RPM + Speed * RPM_PER_KMH, IDLE_RPM, MAX_RPM)
+  ```
+
+  - Throttle accelerates, Brake decelerates, and a drag term (`DRAG_COEFFICIENT * Speed`) continuously pulls speed back down toward 0 when no throttle is applied — modeled as simple linear drag/engine-braking rather than real aerodynamic drag.
+  - RPM is derived directly from Speed (`IDLE_RPM + Speed * RPM_PER_KMH`) rather than simulated independently (e.g. via gear ratios) — a simplification, not a physically-accurate gearbox model.
+- Gain calculation forums consulted:
+  - [How to calculate car engine acceleration and deceleration (Physics Stack Exchange)](https://physics.stackexchange.com/questions/497201/how-to-calculate-car-engine-acceleration-and-deceleration)
+  - [Car Physics for Games (Marco Monster / mirrored by asawicki.info)](https://asawicki.info/Mirror/Car%20Physics%20for%20Games/Car%20Physics%20for%20Games.html)
+- Ran `python ecus/powertrainecu.py` while feeding it throttle via InputECU, sample output:
+  ```
+  Speed=152.59 km/h  RPM=  7666
+  Speed=152.69 km/h  RPM=  7671
+  Speed=152.80 km/h  RPM=  7676
+  Speed=152.93 km/h  RPM=  7682
+  Speed=153.06 km/h  RPM=  7688
+  Speed=153.18 km/h  RPM=  7693
+  Speed=153.30 km/h  RPM=  7699
+  ```
+- Confirms Speed/RPM track Throttle/Brake input as expected, converging toward `MAX_SPEED`/`MAX_RPM` under sustained throttle and decaying via drag when throttle is released.
+
+## Dashboard ECU + Renderer: Visualizing the Car
+
+- Created [`ecus/dashboardecu.py`](ecus/dashboardecu.py) — subscribes to `DriverInput` (`SteeringAngle`) and `PowertrainStatus` (`Speed`, `RPM`); decodes them off the bus and hands the values to the game renderer once per frame. Pure bus subscriber — publishes nothing.
+- Created [`ui/renderer.py`](ui/renderer.py) (`GameRenderer`) — the actual game/UI: scrolls a top-down road scene under the car sprite at a rate proportional to `Speed`, offsets the car left/right based on `SteeringAngle`, and draws `Speed`/`RPM` as holographic HUD arcs. Knows nothing about CAN; DashboardECU just feeds it values.
+- **Note:** the renderer/game-visualization layer sits outside the core scope of this project (CAN bus + ECU communication) — since it's just there to make the output visible/drivable, AI assistance was used to build it, and the car and road-scene art (`resources/car.png`, `resources/scene.png`) are AI-generated assets.
+- Ran all three ECUs together (`inputecu.py`, `powertrainecu.py`, `dashboardecu.py`) alongside `candump vcan0`, confirming controller input flows end-to-end from `InputECU` → CAN bus → `PowertrainECU` → CAN bus → `DashboardECU`/renderer:
+
+  ![All ECUs running](docsResources/all_ecus_running.png)
+
+
