@@ -18,6 +18,8 @@ def main():
     db = cantools.database.load_file(DBC_PATH)
     driver_input = db.get_message_by_name("DriverInput")
     powertrain_status = db.get_message_by_name("PowertrainStatus")
+    # Derived from dbc/car.dbc : BO_ 1024 PlaybackStatus: 1 MultimediaECU
+    playback_status = db.get_message_by_name("PlaybackStatus")
 
     bus = can.Bus(
         channel=CAN_CHANNEL,
@@ -25,6 +27,7 @@ def main():
         can_filters=[
             {"can_id": driver_input.frame_id, "can_mask": 0x7FF, "extended": False},
             {"can_id": powertrain_status.frame_id, "can_mask": 0x7FF, "extended": False},
+            {"can_id": playback_status.frame_id, "can_mask": 0x7FF, "extended": False},
         ],
     )
 
@@ -33,6 +36,7 @@ def main():
     steering_deg = 0.0
     speed_kmh = 0.0
     rpm = 0.0
+    track_label = ""
 
     running = True
     try:
@@ -50,8 +54,11 @@ def main():
                     decoded = powertrain_status.decode(msg.data)
                     speed_kmh = decoded["Speed"]
                     rpm = decoded["RPM"]
+                elif msg.arbitration_id == playback_status.frame_id:
+                    track_index = playback_status.decode(msg.data)["CurrentTrack"]
+                    track_label = f"Track {track_index + 1}"
 
-            renderer.render(steering_deg, speed_kmh, rpm, dt)
+            renderer.render(steering_deg, speed_kmh, rpm, track_label, dt)
     except KeyboardInterrupt:
         print("\nStopping DashboardECU.")
     finally:

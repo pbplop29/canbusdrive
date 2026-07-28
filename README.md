@@ -319,4 +319,19 @@ For more information, see:
 
   ![All ECUs running](docsResources/all_ecus_running.png)
 
+## MultimediaECU: Adding Music
+
+- Extended [`dbc/car.dbc`](dbc/car.dbc) with two more messages:
+  - `MediaControl` (0x300, sent by `InputECU`): `Direction` (0=none, 1=previous, 2=next) + `PressCounter` (a wrapping 0–255 counter). The counter isn't a track number — it's an edge-detector, so two presses of the *same* button in a row don't look identical to the receiver and get missed (a bare `Direction` value alone would look unchanged across two same-direction presses).
+  - `PlaybackStatus` (0x400, sent by `MultimediaECU`): `CurrentTrack`, a plain 0-based index into the playlist — this is also why the on-screen label is `Track 1`/`Track 2`/etc, not a real filename (CAN signals are numeric, not strings).
+- Created [`ecus/multimediaecu.py`](ecus/multimediaecu.py) — headless (no window of its own):
+  - Scans [`resources/music/`](resources/music/) for `.mp3`/`.ogg`/`.wav` files and builds a playlist.
+  - Plays tracks via an `ffplay` subprocess.
+  - On `MediaControl`, steps the current index by **exactly** ±1 with wraparound (`(current + delta) % track_count`) — LB (`Direction=1`) goes to the previous track, RB (`Direction=2`) goes to the next, looping from the last track back to the first and vice versa. A song ending on its own also just advances to the next track, same as a real playlist.
+  - Broadcasts `PlaybackStatus` on every track change **and** on a 1-second heartbeat. CAN messages aren't retained on the bus — a one-shot broadcast only on change is invisible to any ECU (like DashboardECU) that starts listening even a moment later, so the heartbeat guarantees the current track becomes visible within ~1s regardless of process start order.
+  - Treats a track that exits in under 1 second as a failed start (e.g. audio device momentarily busy) rather than "song finished", logs it explicitly, and backs off briefly before retrying — instead of silently spinning through the whole playlist.
+- Updated [`ecus/inputecu.py`](ecus/inputecu.py): LB (`BTN_TL`) publishes `Direction=1`, RB (`BTN_TR`) publishes `Direction=2`. This is also the answer to "can one ECU send more than one kind of message?" — yes, `InputECU` now broadcasts both `DriverInput` and `MediaControl`; there's no 1:1 rule between a CAN node and a message ID.
+- Updated [`ecus/dashboardecu.py`](ecus/dashboardecu.py) to also subscribe to `PlaybackStatus`, turning `CurrentTrack` into a `"Track N"` label passed to the renderer.
+- Updated [`ui/renderer.py`](ui/renderer.py): added `draw_track_label()`, drawn at low opacity at the top of the window (same styling approach as the speed/RPM holograms), and moved the speed/RPM HUD down near the bottom of the window.
+
 

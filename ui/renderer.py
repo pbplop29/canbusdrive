@@ -39,8 +39,8 @@ MAX_RPM_DISPLAY = 8000.0   # matches Powertrain ECU's MAX_RPM
 
 # --- Stacked HUD: holographic speed/RPM arcs below the car ---
 HOLO_CENTER_X = ROAD_CENTER_X
-HOLO_TOP_BASE_Y = 590     # speed -- closer to the car
-HOLO_BOTTOM_BASE_Y = 672  # RPM -- below that
+HOLO_TOP_BASE_Y = 650     # speed
+HOLO_BOTTOM_BASE_Y = 700  # RPM -- near the bottom edge of the window
 HOLO_BULGE = 34
 HOLO_HALF_WIDTH = 150
 HOLO_SAMPLES = 40
@@ -48,9 +48,14 @@ HOLO_TEXT_GAP = 16   # value text distance above the bulge peak
 HOLO_LABEL_GAP = 2   # unit-label text distance above the bulge peak
 HOLO_SPEED_COLOR = (110, 235, 225)
 HOLO_RPM_COLOR = (255, 176, 92)
-HOLO_TRACK_ALPHA = 55
-HOLO_GLOW_ALPHA = 70
-HOLO_FILL_ALPHA = 220
+HOLO_TRACK_ALPHA = 35
+HOLO_GLOW_ALPHA = 45
+HOLO_FILL_ALPHA = 150
+
+# --- Track label: low-opacity "Now Playing" text at the top of the screen ---
+TRACK_LABEL_Y = 36
+TRACK_LABEL_COLOR = (235, 235, 240)
+TRACK_LABEL_ALPHA = 110
 
 
 def clamp(value, lo, hi):
@@ -128,6 +133,12 @@ def draw_hologram(surface, font, center_x, base_y, value, max_value, color, labe
     surface.blit(label_surf, label_rect)
 
 
+def draw_track_label(surface, font, center_x, track_label):
+    label_surf, label_rect = font.render(track_label, (*TRACK_LABEL_COLOR, TRACK_LABEL_ALPHA), size=14)
+    label_rect.center = (center_x, TRACK_LABEL_Y)
+    surface.blit(label_surf, label_rect)
+
+
 class GameRenderer:
     """Owns the pygame window and draws one frame per `render()` call.
 
@@ -166,7 +177,7 @@ class GameRenderer:
         """Advance the frame clock. Returns dt in seconds."""
         return self.clock.tick(FPS) / 1000.0
 
-    def render(self, steering_deg, speed_kmh, rpm, dt):
+    def render(self, steering_deg, speed_kmh, rpm, track_label, dt):
         target_offset = clamp(
             (steering_deg / MAX_STEERING_DEG) * MAX_LATERAL_OFFSET,
             -MAX_LATERAL_OFFSET, MAX_LATERAL_OFFSET,
@@ -182,6 +193,7 @@ class GameRenderer:
         self.hud.fill((0, 0, 0, 0))
         draw_hologram(self.hud, self.font, HOLO_CENTER_X, HOLO_TOP_BASE_Y, speed_kmh, MAX_SPEED_DISPLAY, HOLO_SPEED_COLOR, "SPEED", "KM/H")
         draw_hologram(self.hud, self.font, HOLO_CENTER_X, HOLO_BOTTOM_BASE_Y, rpm, MAX_RPM_DISPLAY, HOLO_RPM_COLOR, "RPM")
+        draw_track_label(self.hud, self.font, ROAD_CENTER_X, track_label)
         self.screen.blit(self.hud, (0, 0))
 
         pygame.display.flip()
