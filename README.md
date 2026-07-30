@@ -2,6 +2,8 @@
 
 ![Gameplay](docsResources/gameplay.gif)
 
+![Architecture](docsResources/architecturev1.png)
+
 ## What is DBC?
 
 - **DBC** = CAN bus Database— a text file format for describing the contents of CAN bus messages.
